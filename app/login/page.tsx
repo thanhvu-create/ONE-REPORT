@@ -10,13 +10,6 @@ import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { useT } from '@/lib/i18n/locale-context';
 import { LoginResponse } from '@/lib/types';
 
-const DEMO_ACCOUNTS = [
-  { email: 'admin@ctyhp.vn', password: 'admin123', label: 'Quản trị hệ thống' },
-  { email: 'executive@ctyhp.vn', password: 'exec123', label: 'Ban lãnh đạo' },
-  { email: 'supervisor@ctyhp.vn', password: 'super123', label: 'Giám sát nội bộ' },
-  { email: 'leader@ctyhp.vn', password: 'leader123', label: 'Trưởng phòng' },
-  { email: 'employee@ctyhp.vn', password: 'emp123', label: 'Nhân viên' },
-] as const;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -93,24 +86,6 @@ export default function LoginPage() {
             {t('login.signin')}
           </HpButton>
 
-          <div className="mt-8 pt-6 border-t border-hp-rule">
-            <p className="eyebrow text-[10px] mb-3">{t('login.demo_accounts')}</p>
-            <ul className="space-y-1.5">
-              {DEMO_ACCOUNTS.map((acc) => (
-                <li key={acc.email}>
-                  <button
-                    type="button"
-                    onClick={() => { setEmail(acc.email); setPassword(acc.password); }}
-                    className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 border border-hp-rule bg-hp-inset/40 hover:border-hp-pink transition-colors min-h-[44px]"
-                  >
-                    <span className="text-sm text-hp-ink shrink-0">{acc.label}</span>
-                    <span className="text-[11px] text-hp-muted font-mono truncate text-right">{acc.email}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-2 text-[10px] text-hp-muted">{t('login.demo_seeded')}</p>
-          </div>
 
         </form>
       </section>
