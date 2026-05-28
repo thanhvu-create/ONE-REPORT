@@ -76,6 +76,7 @@ Ban Giám Sát Nội Bộ
 | `executive` | Chủ TGĐ + Ban GĐ | Xem toàn bộ, dashboard công ty |
 | `supervisor` | Ban Giám Sát Nội Bộ | Xem tất cả 8 phòng, flag vấn đề |
 | `leader` | Trưởng phòng (8 người) | Xem + comment phòng mình, tự submit báo cáo |
+| `manager` | Quản lý cấp trung | Quyền tương đương leader — xem + submit phòng mình |
 | `employee` | Nhân viên | Submit báo cáo, xem lịch sử của mình |
 | `admin` | Phòng IT | Quản lý tài khoản, phòng ban, cấu hình hệ thống |
 
@@ -262,29 +263,71 @@ Supervisor có thể **flag** một báo cáo/vấn đề để escalate lên ex
 
 | Hạng mục | Yêu cầu |
 |----------|---------|
-| Ngôn ngữ UI | Tiếng Việt |
+| Ngôn ngữ UI | Tiếng Việt (mặc định) + English (toggle) |
 | Responsive | Desktop first, mobile usable |
-| Auth security | JWT 24h, bcrypt password |
-| AI fallback | Nếu AI lỗi → không block user |
-| Upload audio | Tối đa 10 phút / file |
-| Performance | Dashboard load < 3s |
-| Deployment | Vercel (frontend + backend), Supabase (database) |
+| Auth security | JWT HS256 · 24h expiry · bcrypt cost 10 |
+| AI fallback | Nếu Gemini lỗi hoặc không có API key → mock response, không block submit |
+| Upload audio | Tối đa 10 phút / file, định dạng webm/ogg/mp4 |
+| Performance | Dashboard load < 3s, API < 1s (Vercel + Supabase cùng region) |
+| Deployment | Vercel auto-deploy từ GitHub `main` · Supabase PostgreSQL |
+| Cron | Nhắc nhở nhân viên chưa nộp báo cáo — 9:00 UTC thứ 2–6 (SMTP optional) |
 
 ---
 
-## 8. Technical Stack (đã quyết định)
+## 8. Technical Stack (hiện tại)
 
 | Layer | Công nghệ |
 |-------|-----------|
-| Backend | NestJS 10 + Prisma 5 |
-| Database | Supabase (PostgreSQL) |
-| Frontend | Next.js 14 App Router + TailwindCSS + TypeScript |
-| Data fetching | SWR |
-| AI STT | OpenAI Whisper (`whisper-1`) — fallback: mock provider nếu không có API key |
-| AI Analysis | OpenAI GPT (`gpt-4o-mini`) — fallback: mock provider nếu không có API key |
-| Auth | Passport-JWT (JWT 24h, bcrypt) + `jose` (edge-compatible JWT verify) |
-| Storage | Supabase Storage hoặc S3-compatible (AWS S3 / R2 / B2) |
-| Deploy | Vercel (frontend + backend functions) |
+| Fullstack framework | Next.js 14 App Router — frontend + API routes trong cùng 1 repo |
+| Database | Supabase PostgreSQL (region: `ap-southeast-2` Sydney) |
+| ORM | Prisma 5 — schema, migration, seed |
+| DB Connection | Supabase Supavisor pooler (port 6543, transaction mode) |
+| Data fetching | SWR (client-side) |
+| AI STT | Google Gemini (`gemini-2.0-flash`) — transcribe audio inline data |
+| AI Analysis | Google Gemini (`gemini-2.0-flash`) — phân tích báo cáo, parse voice/text |
+| AI Fallback | Mock mode khi không có `GEMINI_API_KEY` — không block submit |
+| Auth | JWT HS256 via `jose` — sign + verify, 24h expiry, bcrypt passwords |
+| Middleware | Next.js middleware — route guard theo token, redirect về `/login` |
+| Deploy | Vercel (Fluid Compute) — auto-deploy từ GitHub `main` branch |
+| Source control | GitHub (`thanhvu-create/ONE-REPORT`) |
+| Cron | Vercel Cron — `/api/cron/reminders` chạy 9:00 UTC thứ 2–6 |
+
+### Cấu trúc repo
+
+```
+one-report/
+├── app/
+│   ├── api/          ← API routes (thay thế backend riêng)
+│   ├── admin/        ← Admin pages
+│   ├── leader/       ← Leader pages
+│   ├── supervisor/   ← Supervisor pages
+│   ├── executive/    ← Executive pages
+│   ├── employee/     ← Employee pages
+│   ├── manager/      ← Manager pages
+│   ├── submit/       ← Submit report pages
+│   └── ...
+├── components/       ← UI components
+├── lib/
+│   ├── server/       ← Server-only: prisma, auth, ai, reports
+│   └── ...           ← Client: api.ts, auth.ts, types.ts
+├── prisma/
+│   ├── schema.prisma
+│   ├── migrations/
+│   └── seed.ts
+└── vercel.json
+```
+
+### Environment Variables (Vercel)
+
+| Biến | Mô tả |
+|------|-------|
+| `DATABASE_URL` | Supavisor pooler URL (port 6543) |
+| `DIRECT_URL` | Direct connection URL (port 5432, dùng cho migrate) |
+| `JWT_SECRET` | Secret key ký JWT |
+| `JWT_EXPIRES_IN` | Thời hạn token (mặc định `24h`) |
+| `GEMINI_API_KEY` | Google AI Studio API key |
+| `GEMINI_MODEL` | Model name (mặc định `gemini-2.0-flash`) |
+| `CRON_SECRET` | Bearer token Vercel dùng khi invoke cron job |
 
 ---
 
@@ -292,17 +335,27 @@ Supervisor có thể **flag** một báo cáo/vấn đề để escalate lên ex
 
 | Route | Role | Mô tả |
 |-------|------|-------|
-| `/login` | All | Đăng nhập |
-| `/submit/status-report` | employee, leader | Submit Báo cáo Trạng thái Hạng mục (text / voice / paste) |
-| `/submit/performance-review` | employee, leader | Submit Đánh giá Kết quả (text / voice) |
-| `/history` | employee, leader | Lịch sử tất cả báo cáo của mình, filter theo loại + ngày |
-| `/leader/dashboard` | leader | Dashboard phòng mình |
-| `/leader/reports` | leader | Danh sách báo cáo phòng + filter theo loại/người/ngày |
-| `/supervisor/dashboard` | supervisor | Dashboard toàn công ty |
-| `/supervisor/reports` | supervisor | Xem + filter tất cả báo cáo (loại/phòng/người/ngày) |
+| `/login` | All | Đăng nhập email + password |
+| `/submit/status-report` | employee, leader, manager | Submit Báo cáo Trạng thái Hạng mục (form / voice / paste Task Tracker) |
+| `/submit/performance-review` | employee, leader, manager | Submit Đánh giá Kết quả (form / voice) |
+| `/employee/submit-report` | employee | Shortcut trang submit cho employee |
+| `/employee/history` | employee | Lịch sử báo cáo của cá nhân |
+| `/history` | All (auth) | Lịch sử báo cáo + filter loại/ngày, xem chi tiết |
+| `/reports/[id]` | All (auth) | Chi tiết báo cáo — comment, flag, resolve |
+| `/tasks` | All (auth) | Task Tracker: tạo/sửa tasks, parse từ Google Sheet, subtasks |
+| `/direction` | All (auth) | Định hướng phòng ban — xem + chỉnh sửa (leader/manager/admin) |
+| `/leader/dashboard` | leader, manager | Dashboard phòng mình — KPI cards, trend, missing, blockers |
+| `/leader/reports` | leader, manager | Danh sách báo cáo phòng + filter loại/người/ngày/priority |
+| `/manager/dashboard` | manager | Redirect → `/leader/dashboard` |
+| `/manager/reports` | manager | Redirect → `/leader/reports` |
+| `/manager/issues` | manager | Redirect → leader issues view |
+| `/supervisor/dashboard` | supervisor | Dashboard toàn công ty — heatmap, issues, contributors |
+| `/supervisor/reports` | supervisor | Xem + filter tất cả báo cáo + export CSV |
 | `/executive/dashboard` | executive | Dashboard toàn công ty (read-only) |
-| `/admin/users` | admin | Quản lý tài khoản |
+| `/admin/users` | admin | Quản lý users — tạo, sửa, vô hiệu hóa |
 | `/admin/departments` | admin | Quản lý phòng ban |
+| `/admin/positions` | admin, leader | Sơ đồ tổ chức — vị trí + KPI theo vị trí |
+| `/admin/positions/[id]` | admin, leader | Chi tiết vị trí + quản lý KPI |
 
 ---
 
@@ -322,16 +375,21 @@ Supervisor có thể **flag** một báo cáo/vấn đề để escalate lên ex
 
 ## 11. Định nghĩa hoàn thành (Definition of Done — V1)
 
-- [ ] Tất cả 5 roles đăng nhập được, redirect đúng trang
-- [ ] Employee submit được Báo cáo Trạng thái Hạng mục bằng cả 3 cách (text / voice / paste Task Tracker)
-- [ ] Employee submit được Đánh giá Kết quả bằng cả 2 cách (text / voice)
-- [ ] AI transcribe voice và fill form đúng loại báo cáo đang chọn (với fallback nếu lỗi)
-- [ ] AI convert paste Task Tracker thành form Trạng thái Hạng mục được
-- [ ] Leader thấy dashboard phòng mình, comment được
-- [ ] Supervisor/Executive thấy dashboard toàn công ty
-- [ ] Admin tạo/sửa được user và phòng ban
-- [ ] Chạy được trên Docker Compose
-- [ ] Không có lỗi bảo mật nghiêm trọng (auth bypass, data leak giữa phòng)
+- [x] Tất cả 6 roles đăng nhập được, redirect đúng trang
+- [x] Employee/leader/manager submit được Báo cáo Trạng thái Hạng mục (form / voice / paste Task Tracker)
+- [x] Employee/leader/manager submit được Đánh giá Kết quả (form / voice)
+- [x] AI (Gemini) transcribe voice và fill form đúng loại báo cáo đang chọn
+- [x] AI fallback — không block submit khi Gemini lỗi hoặc thiếu API key
+- [x] AI convert paste Task Tracker thành form Trạng thái Hạng mục
+- [x] Leader/manager thấy dashboard phòng mình, comment được
+- [x] Supervisor/Executive thấy dashboard toàn công ty, export CSV
+- [x] Admin tạo/sửa được user, phòng ban, vị trí + KPI
+- [x] Supervisor có thể flag/resolve báo cáo kèm ghi chú
+- [x] Định hướng phòng ban — tạo/sửa được, hiển thị cho toàn phòng
+- [x] Task Tracker — tạo/sửa tasks, bulk import từ Google Sheet
+- [x] Deploy trên Vercel, auto-deploy từ GitHub `main`
+- [x] Database Supabase PostgreSQL, migrate + seed hoàn chỉnh
+- [x] Không có lỗi bảo mật nghiêm trọng (auth bypass, data leak giữa phòng)
 
 ---
 
