@@ -1,0 +1,3 @@
+ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "resolved_note" TEXT;
+ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "resolved_at" TIMESTAMP(3);
+ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "resolved_by_id" INTEGER;

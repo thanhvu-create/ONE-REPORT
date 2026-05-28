@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-foundation: #f7f1eb;
+    --surface-card: #fbf7f1;
+    --surface-inset: #efe8dd;
+    --ink-primary: #2a2725;
+    --ink-body: #4a4540;
+    --ink-muted: #8a8178;
+    --rule: #d4cfc4;
+    --accent: #e91d79;
+    --platinum: #bdc1c6;
+  }
+
+  html,
+  body {
+    background: var(--bg-foundation);
+    color: var(--ink-body);
+    font-family: var(--font-body), Georgia, serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  @supports (padding: max(0px)) {
+    .safe-area-pad {
+      padding-left: max(0px, env(safe-area-inset-left));
+      padding-right: max(0px, env(safe-area-inset-right));
+    }
+    .safe-area-pad-bottom {
+      padding-bottom: max(0px, env(safe-area-inset-bottom));
+    }
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+
+  ::selection {
+    background: var(--accent);
+    color: var(--bg-foundation);
+  }
+}
+
+@layer components {
+  .eyebrow {
+    @apply uppercase tracking-eyebrow text-[11px] text-hp-muted;
+  }
+  .hp-divider {
+    @apply h-px bg-hp-rule;
+  }
+  .table-scroll {
+    @apply w-full overflow-x-auto border border-hp-rule;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .table-scroll::-webkit-scrollbar {
+    height: 6px;
+  }
+  .table-scroll::-webkit-scrollbar-thumb {
+    @apply bg-hp-rule rounded-full;
+  }
+  .hp-input {
+    @apply w-full bg-transparent border border-hp-rule px-3 py-2 text-sm text-hp-ink focus:outline-none focus:border-hp-pink transition-colors duration-150;
+  }
+  .card-list {
+    @apply flex flex-col gap-3 md:hidden;
+  }
+  .table-desktop {
+    @apply hidden md:block;
+  }
+  .table-scroll > table {
+    @apply border-0;
+  }
+  .table-scroll > table tbody tr:last-child {
+    @apply border-b-0;
+  }
+}

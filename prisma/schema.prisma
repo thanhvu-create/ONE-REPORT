@@ -1,0 +1,303 @@
+// One Report V1 — Prisma schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  employee
+  leader
+  supervisor
+  manager
+  executive
+  admin
+}
+
+enum SourceType {
+  text
+  voice
+  task_tracker
+}
+
+enum ReportType {
+  status_report
+  performance_review
+}
+
+enum Priority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum ReportStatus {
+  submitted
+  reviewed
+  flagged
+  resolved
+}
+
+enum ReviewPeriod {
+  weekly
+  monthly
+  quarterly
+}
+
+enum KpiCycle {
+  monthly
+  quarterly
+}
+
+enum TaskStatus {
+  todo
+  doing
+  blocked
+  done
+}
+
+model Department {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique @db.VarChar(255)
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt       @map("updated_at")
+
+  users      User[]
+  reports    Report[]
+  directions DepartmentDirection[]
+  positions  Position[]
+  tasks      Task[]
+
+  @@map("departments")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  fullName     String   @map("full_name") @db.VarChar(255)
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash")
+  role         Role
+  departmentId Int?     @map("department_id")
+  positionId   Int?     @map("position_id")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt       @map("updated_at")
+
+  department        Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  position          Position?          @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  reports           Report[]
+  comments          Comment[]
+  tasks             Task[]
+  taskStatusChanges TaskStatusHistory[]
+
+  @@index([departmentId])
+  @@index([positionId])
+  @@map("users")
+}
+
+model Report {
+  id              Int           @id @default(autoincrement())
+  userId          Int           @map("user_id")
+  departmentId    Int?          @map("department_id")
+  reportType      ReportType    @map("report_type")
+  sourceType      SourceType    @map("source_type")
+
+  originalContent String?       @map("original_content")
+  transcript      String?
+
+  statusItems     Json          @default("[]") @map("status_items")
+  performanceData Json          @default("{}") @map("performance_data")
+
+  aiSummary       String?       @map("ai_summary")
+  aiPriority      Priority?     @map("ai_priority")
+  issueCategory   String?       @map("issue_category") @db.VarChar(255)
+
+  hasBlocker                Boolean @default(false) @map("has_blocker")
+  needsSupport               Boolean @default(false) @map("needs_support")
+  needsDirectionAdjustment   Boolean @default(false) @map("needs_direction_adjustment")
+
+  status          ReportStatus  @default(submitted)
+  isFlagged       Boolean       @default(false) @map("is_flagged")
+  flagNote        String?       @map("flag_note")
+  resolvedNote    String?       @map("resolved_note")
+  resolvedAt      DateTime?     @map("resolved_at")
+  resolvedById    Int?          @map("resolved_by_id")
+
+  reviewPeriod    ReviewPeriod? @map("review_period")
+
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt       @map("updated_at")
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department  Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  voiceRecord VoiceRecord?
+  aiLogs      AiProcessingLog[]
+  comments    Comment[]
+
+  @@index([userId])
+  @@index([departmentId])
+  @@index([createdAt])
+  @@index([aiPriority])
+  @@index([hasBlocker])
+  @@index([reportType])
+  @@index([isFlagged])
+  @@map("reports")
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  reportId  Int      @map("report_id")
+  userId    Int      @map("user_id")
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@map("comments")
+}
+
+model VoiceRecord {
+  id              Int      @id @default(autoincrement())
+  reportId        Int      @unique @map("report_id")
+  filePath        String   @map("file_path")
+  fileName        String?  @map("file_name") @db.VarChar(255)
+  mimeType        String?  @map("mime_type") @db.VarChar(100)
+  durationSeconds Int?     @map("duration_seconds")
+  transcript      String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("voice_records")
+}
+
+model AiProcessingLog {
+  id         Int      @id @default(autoincrement())
+  reportId   Int?     @map("report_id")
+  action     String   @db.VarChar(100)
+  inputText  String?  @map("input_text")
+  outputText String?  @map("output_text")
+  modelName  String?  @map("model_name") @db.VarChar(100)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  report Report? @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("ai_processing_logs")
+}
+
+model Position {
+  id               Int      @id @default(autoincrement())
+  departmentId     Int      @map("department_id")
+  title            String   @db.VarChar(255)
+  rolePurpose      String?  @map("role_purpose")
+  workstreams      Json     @default("[]")
+  responsibilities Json     @default("[]")
+  expectedOutputs  Json     @default("[]")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt       @map("updated_at")
+
+  department Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  kpis       PositionKpi[]
+  users      User[]
+  tasks      Task[]
+
+  @@index([departmentId])
+  @@map("positions")
+}
+
+model PositionKpi {
+  id         Int      @id @default(autoincrement())
+  positionId Int      @map("position_id")
+  kpiName    String   @map("kpi_name") @db.VarChar(255)
+  target     String?
+  cycle      KpiCycle
+  notes      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt       @map("updated_at")
+
+  position Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  @@index([positionId])
+  @@map("position_kpis")
+}
+
+model Task {
+  id           Int        @id @default(autoincrement())
+  userId       Int        @map("user_id")
+  departmentId Int?       @map("department_id")
+  positionId   Int?       @map("position_id")
+  title        String
+  description  String?
+  status       TaskStatus @default(todo)
+  priority     Priority   @default(medium)
+  deadline     DateTime?
+  completedAt  DateTime?  @map("completed_at")
+  parentTaskId Int?       @map("parent_task_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt       @map("updated_at")
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department   Department?         @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  position     Position?           @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  parentTask   Task?               @relation("subtasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  subtasks     Task[]              @relation("subtasks")
+  statusHistory TaskStatusHistory[]
+
+  @@index([userId])
+  @@index([departmentId])
+  @@index([status])
+  @@index([deadline])
+  @@index([parentTaskId])
+  @@map("tasks")
+}
+
+model TaskStatusHistory {
+  id           Int        @id @default(autoincrement())
+  taskId       Int        @map("task_id")
+  fromStatus   TaskStatus? @map("from_status")
+  toStatus     TaskStatus @map("to_status")
+  changedById  Int        @map("changed_by_id")
+  note         String?
+  changedAt    DateTime   @default(now()) @map("changed_at")
+
+  task        Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  changedBy   User @relation(fields: [changedById], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_status_history")
+}
+
+model DepartmentDirection {
+  id                       Int      @id @default(autoincrement())
+  departmentId             Int      @map("department_id")
+  isCurrent                Boolean  @default(true) @map("is_current")
+
+  overallObjective         String?  @map("overall_objective")
+  currentStatus            String?  @map("current_status")
+  transformationDirection  String?  @map("transformation_direction")
+  strategicFunctions       Json     @default("[]") @map("strategic_functions")
+  shortTerm                String?  @map("short_term")
+  midTerm                  String?  @map("mid_term")
+  longTerm                 String?  @map("long_term")
+  keyKpis                  Json     @default("[]") @map("key_kpis")
+  summaryItems             Json     @default("[]") @map("summary_items")
+
+  createdById              Int?     @map("created_by_id")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt       @map("updated_at")
+
+  department  Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@index([departmentId, isCurrent])
+  @@index([departmentId, createdAt])
+  @@map("department_directions")
+}
